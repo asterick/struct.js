@@ -11,7 +11,7 @@ The structures are bit packed and will allow misaligned values of any type
 Building
 --------
 
-	npm install
+	npm install pegjs
 	./node_modules/.bin/pegjs struct.peg
 
 
