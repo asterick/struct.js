@@ -1,0 +1,301 @@
+/**
+ ** Structure handler for javascript
+ **/
+
+main
+	= _ s:fieldset
+{
+	return function (data) {
+		if (!data) { data = new ArrayBuffer(Math.ceil(s.size/8)); }
+
+		var dv = new DataView(data),
+			u8 = new Uint8Array(data),
+			ta = new ArrayBuffer(8),
+			tint = new Uint32Array(ta),
+			tf32 = new Float32Array(ta),
+			tf64 = new Float64Array(ta);
+
+		function readBits(bits, byteAddress, bitOffset) {
+			return function () {
+				var ba = byteAddress,
+					l = bits,
+					s = 0,
+					v = 0;
+
+				if (bitOffset) {
+					v = u8[ba++] >> bitOffset;
+					s = 8 - bitOffset;
+					l -= s;
+				}
+
+				while (l > 0) {
+					v |= u8[ba++] << s;
+					s += 8;
+					l -= 8;
+				}
+
+				if (bits !== 32)
+					return v & ((1 << bits) - 1);
+				else
+					return v;
+			};
+		}
+
+		function writeBits(bits, byteAddress, bitOffset) {
+			return function (v) {
+				var ba = byteAddress,
+					mask = (bits == 32) ? 0xFFFFFFFF : ((1 << bits) - 1),
+					l = bits,
+					s = 0;
+
+				// Trim off unused bits
+				v &= mask;
+
+				if (bitOffset) {
+					u8[ba] = (u8[ba] & ~(mask << bitOffset)) | (v << bitOffset);
+					s = 8 - bitOffset;
+					l -= s;
+					ba++;
+				}
+
+				while (l >= 8) {
+					u8[ba++] = v >> s;
+					s += 8;
+					l -= 8;
+				}
+
+				if (l > 0) {
+					u8[ba] = (u8[ba] & (0xFF << l)) | (v >> s);
+				}
+			};
+		}
+
+		function unsigned(bits, byteAddress, bitOffset) {
+			if (!bitOffset) {
+				switch (bits) {
+				case 8:
+					return {
+						get: function () { return u8[byteAddress]; },
+						set: function (v) { u8[byteAddress] = v; }
+					}
+				case 16:
+					return {
+						get: function () { return dv.getUint16(byteAddress, true); },
+						set: function (v) { dv.setUint16(byteAddress, v, true); }
+					}
+				case 32:
+					return {
+						get: function () { return dv.getUint32(byteAddress, true); },
+						set: function (v) { dv.setUint32(byteAddress, v, true); }
+					}
+				}
+			}
+
+			return {
+				get: readBits(bits, byteAddress, bitOffset),
+				set: writeBits(bits, byteAddress, bitOffset)
+			};
+		}
+
+		function signed(bits, byteAddress, bitOffset) {
+			var o = unsigned(bits, byteAddress, bitOffset),
+				pg = o.get;
+
+			// Unsigned 32 is always signed
+			if (bits !== 32) {
+				var top = 32 - bits;
+				o.get = function () { return pg() << top >> top; };
+			}
+
+			return o;
+		}
+
+		function float(bits, byteAddress, bitOffset) {
+			if (!bitOffset) {
+				switch (bits) {
+				case 32:
+					return {
+						get: function () { return dv.getFloat32(byteAddress, true); },
+						set: function (v) { dv.setFloat32(byteAddress, v, true); }
+					}
+				case 64:
+					return {
+						get: function () { return dv.getFloat64(byteAddress, true); },
+						set: function (v) { dv.setFloat64(byteAddress, v, true); }
+					}
+				}
+			}
+
+			var rl = readBits(32, byteAddress, bitOffset),
+				wl = writeBits(32, byteAddress, bitOffset),
+				rh, wh;
+
+			switch (bits) {
+				case 32:
+					return {
+						get: function () {
+							tint[0] = rl();
+							return tf32[0]
+						},
+						set: function (v) {
+							tf32[0] = v;
+							wl(tint[0]);
+						}
+					};
+				case 64:
+					rh = readBits(32, byteAddress + 4, bitOffset);
+					wh = writeBits(32, byteAddress + 4, bitOffset);
+
+					return {
+						get: function () {
+							tint[0] = rl();
+							tint[1] = rh();
+							return tf64[0];
+						},
+						set: function (v) {
+							tf64[0] = v;
+
+							wl(tint[0]);
+							wh(tint[1]);
+						}
+					};
+			}
+		}
+
+		function fieldDefinition(field, offset) {
+
+			if (field.count) {
+				var array = {};
+
+				for (var i = 0; i < field.count; i++) {
+					var def = fieldDefinition(field.field, offset + i * field.field.size);
+					if (!def) return ;
+					Object.defineProperty(array, i, def);
+				}
+
+				return { value: array };
+			}
+
+			switch (field.type) {
+			case 'struct':
+				return { value: new Struct(data, field.fields, offset) };
+			case 'unsigned':
+				return unsigned(field.size, Math.floor(offset / 8), offset % 8);
+			case 'signed':
+				return signed(field.size, Math.floor(offset / 8), offset % 8);
+			case 'float':
+				return float(field.size, Math.floor(offset / 8), offset % 8);
+			case 'union':
+				var union = {};
+
+				field.fields.forEach(function (f) {
+					var def = fieldDefinition(f, field.offset);
+					if (def) Object.defineProperty(union, f.name, def);
+				});
+
+				return { value: union };
+			}
+		}
+
+		function Struct(data, fields, offset) {
+			var that = Object.create({
+				_data: data,
+				_size: s.size
+			});
+
+			fields.forEach(function (field) {
+				if (field.type === "void") { return ; }
+
+				var def = fieldDefinition(field, field.offset);
+				if (def) Object.defineProperty(that, field.name, def);
+			});
+
+			return that;
+		}
+
+		return new Struct(data, s, 0);
+	};
+}
+
+/**
+ ** Grammar here
+ **/
+
+fieldset
+	= "{" _ f:sized* "}" _
+		{
+			f.size = f.reduce(function (offset, field) {
+				field.offset = offset;
+				return offset + field.size;
+			}, 0);
+
+			return f;
+		}
+
+field
+	= "signed" _ ":" _ bits:integer n:identifier
+		{
+			if (bits > 32) throw new Error("Integer fields may not exceed 32 bits") ;
+			
+			return { type: "signed", name: n, size: bits };
+		}
+	/ "unsigned" _ ":" _ bits:integer n:identifier
+		{
+			if (bits > 32) throw new Error("Integer fields may not exceed 32 bits") ;
+			
+			return { type: "unsigned", name: n, size: bits };
+		}
+	/ "float"  _  ":" _ bits:integer n:identifier
+		{
+			if (bits != 64 && bits != 32) throw new Error("IEEE Floating point may only be 32 and 64 bit") ;
+
+			return { type: "float", name: n, size: bits };
+		}
+	/ "void" _  ":" _ bits:integer
+		{
+			return { type: "void", size: bits };
+		}
+	/ "union" _ n:identifier f:fieldset
+		{ 
+			var size = f.reduce(function (a, b) {
+				return Math.max(a, b.size);
+			}, 0);
+
+			return { type: "union", name: n, fields: f, size: size };
+		}
+	/ "struct" _ n:identifier f:fieldset
+		{
+			var size = f.reduce(function (a, b) {
+				return a + b.size;
+			}, 0);
+
+			return { type: "struct", name: n, fields: f, size: size };
+		}
+
+sized
+	= f:field s:("[" _ s:integer "]" _ {return s; })+ (";" _)?
+		{
+			return s.reverse().reduce(function (f, s) {
+				return { type: "array", name: f.name, count: s, field: f, size: f.size * s };
+			}, f);
+		}
+	/ f:field (";" _)?
+		{ return f; }
+
+identifier
+	= a:[a-z_] b:[a-z0-9_]* _
+		{ return a + b.join(''); }
+
+integer
+	= a:[1-9] b:[0-9]* _
+		{ return parseInt(a + b.join(''), 10); }
+	/ "0" _
+		{ return 0; }
+
+_
+	= ws*
+
+ws
+	= [ \n\r\t\f]
+	/ "/*" (!"*/" . )* "*/"
+	/ "//" (!"\n" .)*
