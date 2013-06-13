@@ -21,7 +21,7 @@ Usage
 ### Struct.js Syntax
 
 Struct.js only interprets the characters: A-Z, 0-9 and _ as indentifier characters, and 
-identifiers my not begin with a number.  The top level entity must be surrounded with 
+identifiers may not begin with a number.  The top level entity must be surrounded with 
 curly braces. C style comments are supported.
 
 
