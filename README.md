@@ -35,22 +35,28 @@ and structs.  Semi-colons are optional for seperating fields.
 	}
 
 #### Bit-field types	
+
 ```unsigned:[bitsize] [identifer]```
+
 Create an unsigned bit field of n-bits in length.  
 These fields are restricted to 32-bits in max length (javascript limitations)
 
 ```signed:[bitsize] [identifer]```
+
 Create an 2's complement bit field of n-bits in length.  
 These fields are restricted to 32-bits in max length (javascript limitations)
 
 ```float:[bitsize] [identifer]```
-Create an IEEE floating point field.  
-May only be 32 and 64 bits in length
 
-```void:[bitsize]```
+Create an IEEE floating point field.  
+May only be 32 and 64 bits in length.
+
+``` void:[bitsize] ```
+
 Create an untyped, unnamed bit field. Useful for aligning bit fields.
 
 #### Grouping types
+
 ```struct [identifier] [field group]``` 
 Create a structured group of fields.  
 The position of each field is equal to the previous field plus it's size in bits.
