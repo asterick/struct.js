@@ -7,10 +7,6 @@ It currently works both in browser and with node.js (depends on peg.js build set
 The structures are bit packed and will allow misaligned values of any type 
 (including floating-point).  This allows for very flexible network message decoding.
 
-Currently, struct.js only supports little-endian mode, however this will likely change in the
-future.
-
-
 Building
 --------
 
