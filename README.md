@@ -39,20 +39,28 @@ and structs.  Semi-colons are optional for seperating fields.
 
 #### Bit-field types	
 
-```unsigned:[bitsize] [identifer]```
+```[endian]? unsigned:[bitsize] [identifer]```
 
 Create an unsigned bit field of n-bits in length.  
 These fields are restricted to 32-bits in max length (javascript limitations)
 
-```signed:[bitsize] [identifer]```
+An optional endian parameter may be specified to change byte order: "big" or "little".
+
+*NOTE: little endian is default*
+
+```[endian]? signed:[bitsize] [identifer]```
 
 Create an 2's complement bit field of n-bits in length.  
 These fields are restricted to 32-bits in max length (javascript limitations)
 
-```float:[bitsize] [identifer]```
+An optional endian parameter may be specified to change byte order: "big" or "little".
+
+```[endian]? float:[bitsize] [identifer]```
 
 Create an IEEE floating point field.  
 May only be 32 and 64 bits in length.
+
+An optional endian parameter may be specified to change byte order: "big" or "little".
 
 ``` void:[bitsize] ```
 

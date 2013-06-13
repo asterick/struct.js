@@ -16,12 +16,14 @@ main
 			tf32 = new Float32Array(ta),
 			tf64 = new Float64Array(ta);
 
-		function readBits(bits, byteAddress, bitOffset, signed) {
-			var o = ["var v = 0;"];
-
+		// This is currently only little endian
+		function readBits(little, bits, byteAddress, bitOffset, signed) {
 			var ba = byteAddress,
 				l = bits,
-				s = 0;
+				s = 0,
+				o = ["var v = 0;"];
+
+			if (!little) { throw new Error("Big-endian on unaligned values unsupported"); }
 
 			if (bitOffset) {
 				o.push("v = u8[", ba++, "] >> ", bitOffset, ";");
@@ -53,13 +55,17 @@ main
 			return (new Function("u8", o.join(''))).bind(null, u8);
 		}
 
-		function writeBits(bits, byteAddress, bitOffset) {
+		// This is currently only little endian
+		function writeBits(little, bits, byteAddress, bitOffset) {
 			var ba = byteAddress,
 				mask = (bits == 32) ? 0xFFFFFFFF : ((1 << bits) - 1),
 				l = bits,
 				s = 0,
 				// Trim off unused bits
 				o = ["v &= ", mask, ";"];
+
+			if (!little) { throw new Error("Big-endian on unaligned values unsupported"); }
+
 
 			if (bitOffset) {
 				o.push("u8[",ba,"] = (u8[",ba,"] & ~(",mask << bitOffset,")) | (v << ",bitOffset,");");
@@ -81,7 +87,7 @@ main
 			return (new Function("u8", "v", o.join(''))).bind(null, u8);
 		}
 
-		function unsigned(bits, byteAddress, bitOffset) {
+		function unsigned(little, bits, byteAddress, bitOffset) {
 			if (!bitOffset) {
 				switch (bits) {
 				case 8:
@@ -91,13 +97,13 @@ main
 					}
 				case 16:
 					return {
-						get: function () { return dv.getUint16(byteAddress, true); },
-						set: function (v) { dv.setUint16(byteAddress, v, true); }
+						get: function () { return dv.getUint16(byteAddress, little); },
+						set: function (v) { dv.setUint16(byteAddress, v, little); }
 					}
 				case 32:
 					return {
-						get: function () { return dv.getUint32(byteAddress, true); },
-						set: function (v) { dv.setUint32(byteAddress, v, true); }
+						get: function () { return dv.getUint32(byteAddress, little); },
+						set: function (v) { dv.setUint32(byteAddress, v, little); }
 					}
 				}
 			}
@@ -108,7 +114,7 @@ main
 			};
 		}
 
-		function signed(bits, byteAddress, bitOffset) {
+		function signed(little, bits, byteAddress, bitOffset) {
 			if (!bitOffset) {
 				switch (bits) {
 				case 8:
@@ -118,43 +124,43 @@ main
 					}
 				case 16:
 					return {
-						get: function () { return dv.getInt16(byteAddress, true); },
-						set: function (v) { dv.setInt16(byteAddress, v, true); }
+						get: function () { return dv.getInt16(byteAddress, little); },
+						set: function (v) { dv.setInt16(byteAddress, v, little); }
 					}
 				case 32:
 					return {
-						get: function () { return dv.getInt32(byteAddress, true); },
-						set: function (v) { dv.setInt32(byteAddress, v, true); }
+						get: function () { return dv.getInt32(byteAddress, little); },
+						set: function (v) { dv.setInt32(byteAddress, v, little); }
 					}
 				}
 			}
 
 			return {
-				get: readBits(bits, byteAddress, bitOffset, true),
-				set: writeBits(bits, byteAddress, bitOffset)
+				get: readBits(little, bits, byteAddress, bitOffset, true),
+				set: writeBits(little, bits, byteAddress, bitOffset)
 			};
 
 			return o;
 		}
 
-		function float(bits, byteAddress, bitOffset) {
+		function float(little, bits, byteAddress, bitOffset) {
 			if (!bitOffset) {
 				switch (bits) {
 				case 32:
 					return {
-						get: function () { return dv.getFloat32(byteAddress, true); },
-						set: function (v) { dv.setFloat32(byteAddress, v, true); }
+						get: function () { return dv.getFloat32(byteAddress, little); },
+						set: function (v) { dv.setFloat32(byteAddress, v, little); }
 					}
 				case 64:
 					return {
-						get: function () { return dv.getFloat64(byteAddress, true); },
-						set: function (v) { dv.setFloat64(byteAddress, v, true); }
+						get: function () { return dv.getFloat64(byteAddress, little); },
+						set: function (v) { dv.setFloat64(byteAddress, v, little); }
 					}
 				}
 			}
 
-			var rl = readBits(32, byteAddress, bitOffset),
-				wl = writeBits(32, byteAddress, bitOffset),
+			var rl = readBits(little, 32, byteAddress, bitOffset),
+				wl = writeBits(little, 32, byteAddress, bitOffset),
 				rh, wh;
 
 			switch (bits) {
@@ -170,8 +176,8 @@ main
 						}
 					};
 				case 64:
-					rh = readBits(32, byteAddress + 4, bitOffset);
-					wh = writeBits(32, byteAddress + 4, bitOffset);
+					rh = readBits(little, 32, byteAddress + 4, bitOffset);
+					wh = writeBits(little, 32, byteAddress + 4, bitOffset);
 
 					return {
 						get: function () {
@@ -207,11 +213,11 @@ main
 			case 'struct':
 				return { value: new Struct(data, field.fields, offset) };
 			case 'unsigned':
-				return unsigned(field.size, Math.floor(offset / 8), offset % 8);
+				return unsigned(field.endian === "little", field.size, Math.floor(offset / 8), offset % 8);
 			case 'signed':
-				return signed(field.size, Math.floor(offset / 8), offset % 8);
+				return signed(field.endian === "little", field.size, Math.floor(offset / 8), offset % 8);
 			case 'float':
-				return float(field.size, Math.floor(offset / 8), offset % 8);
+				return float(field.endian === "little", field.size, Math.floor(offset / 8), offset % 8);
 			case 'union':
 				var union = {};
 
@@ -260,23 +266,23 @@ fieldset
 		}
 
 field
-	= "signed" _ ":" _ bits:integer n:identifier
+	= e:endian "signed" _ ":" _ bits:integer n:identifier
 		{
 			if (bits > 32) throw new Error("Integer fields may not exceed 32 bits") ;
 			
-			return { type: "signed", name: n, size: bits };
+			return { type: "signed", endian: e, name: n, size: bits };
 		}
-	/ "unsigned" _ ":" _ bits:integer n:identifier
+	/ e:endian "unsigned" _ ":" _ bits:integer n:identifier
 		{
 			if (bits > 32) throw new Error("Integer fields may not exceed 32 bits") ;
 			
-			return { type: "unsigned", name: n, size: bits };
+			return { type: "unsigned", endian: e, name: n, size: bits };
 		}
-	/ "float"  _  ":" _ bits:integer n:identifier
+	/ e:endian "float"  _  ":" _ bits:integer n:identifier
 		{
 			if (bits != 64 && bits != 32) throw new Error("IEEE Floating point may only be 32 and 64 bit") ;
 
-			return { type: "float", name: n, size: bits };
+			return { type: "float", endian: e, name: n, size: bits };
 		}
 	/ "void" _  ":" _ bits:integer
 		{
@@ -308,6 +314,14 @@ sized
 		}
 	/ f:field (";" _)?
 		{ return f; }
+
+endian
+	= "big"i _
+		{ return "big"; }
+	/ "little"i _
+		{ return "little"; }
+	/ _
+		{ return "little"; }
 
 identifier
 	= a:[a-z_] b:[a-z0-9_]* _
