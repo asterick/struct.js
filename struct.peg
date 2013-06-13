@@ -16,58 +16,60 @@ main
 			tf64 = new Float64Array(ta);
 
 		function readBits(bits, byteAddress, bitOffset) {
-			return function () {
-				var ba = byteAddress,
-					l = bits,
-					s = 0,
-					v = 0;
+			var o = ["var v = 0;"];
 
-				if (bitOffset) {
-					v = u8[ba++] >> bitOffset;
-					s = 8 - bitOffset;
-					l -= s;
-				}
+			var ba = byteAddress,
+				l = bits,
+				s = 0;
 
-				while (l > 0) {
-					v |= u8[ba++] << s;
-					s += 8;
-					l -= 8;
-				}
+			if (bitOffset) {
+				o.push("v = u8[", ba++, "] >> ", bitOffset, ";");
+				s = 8 - bitOffset;
+				l -= s;
+			}
 
-				if (bits !== 32)
-					return v & ((1 << bits) - 1);
-				else
-					return v;
-			};
+			while (l > 0) {
+				o.push("v |= u8[", ba++, "] << ", s, ";");
+				s += 8;
+				l -= 8;
+			}
+
+			o.push("return v");
+
+			if (bits !== 32)
+				 o.push(" & ((1 << ", bits, ") - 1);");
+
+			return (new Function("u8", o.join(''))).bind(null, u8);
 		}
 
 		function writeBits(bits, byteAddress, bitOffset) {
-			return function (v) {
-				var ba = byteAddress,
-					mask = (bits == 32) ? 0xFFFFFFFF : ((1 << bits) - 1),
-					l = bits,
-					s = 0;
-
+			var ba = byteAddress,
+				mask = (bits == 32) ? 0xFFFFFFFF : ((1 << bits) - 1),
+				l = bits,
+				s = 0,
 				// Trim off unused bits
-				v &= mask;
+				o = ["v &= ", mask, ";"];
 
-				if (bitOffset) {
-					u8[ba] = (u8[ba] & ~(mask << bitOffset)) | (v << bitOffset);
-					s = 8 - bitOffset;
-					l -= s;
-					ba++;
-				}
+			if (bitOffset) {
+				o.push("u8[",ba,"] = (u8[",ba,"] & ~(",mask << bitOffset,")) | (v << ",bitOffset,");");
+				s = 8 - bitOffset;
+				l -= s;
+				ba++;
+			}
 
-				while (l >= 8) {
-					u8[ba++] = v >> s;
-					s += 8;
-					l -= 8;
-				}
+			while (l >= 8) {
+				o.push("u8[",ba++,"] = v >> ", s, ";");
+				s += 8;
+				l -= 8;
+			}
 
-				if (l > 0) {
-					u8[ba] = (u8[ba] & (0xFF << l)) | (v >> s);
-				}
-			};
+			if (l > 0) {
+				o.push("u8[",ba,"] = (u8[",ba,"] & (",0xFF << l,")) | (v >> ",s,");");
+			}
+		
+			console.log(o.join(''));
+
+			return (new Function("u8", "v", o.join(''))).bind(null, u8);
 		}
 
 		function unsigned(bits, byteAddress, bitOffset) {
