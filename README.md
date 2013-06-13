@@ -93,10 +93,10 @@ array buffer.
 ### Example (structure)
 
 	{
-		unsigned:32 header;
-		float:64 	version;
-		unsigned:16 code;
-		unsigned:16	length;
+		big unsigned:32 	header;
+		little float:64 	version;
+		unsigned:16 		code;
+		unsigned:16			length;
 
 		union operations {
 			float:32 float;
