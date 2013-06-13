@@ -10,12 +10,13 @@ main
 
 		var dv = new DataView(data),
 			u8 = new Uint8Array(data),
+			s8 = new Int8Array(data),
 			ta = new ArrayBuffer(8),
 			tint = new Uint32Array(ta),
 			tf32 = new Float32Array(ta),
 			tf64 = new Float64Array(ta);
 
-		function readBits(bits, byteAddress, bitOffset) {
+		function readBits(bits, byteAddress, bitOffset, signed) {
 			var o = ["var v = 0;"];
 
 			var ba = byteAddress,
@@ -34,10 +35,20 @@ main
 				l -= 8;
 			}
 
-			o.push("return v");
-
-			if (bits !== 32)
-				 o.push(" & ((1 << ", bits, ") - 1);");
+			if (bits !== 32) {
+				 if (signed) {
+				 	// Sign extend
+				 	o.push("return v << ", 32 - bits, ">> ", 32 - bits);
+				 } else {
+					o.push("return v & ((1 << ", bits, ") - 1)");
+				 }
+			} else {
+				if (signed) {
+					o.push("return v;");
+				} else {
+					o.push("return (v & 0x80000000) ? (v + 0x100000000) : v;");
+				}
+			}
 
 			return (new Function("u8", o.join(''))).bind(null, u8);
 		}
@@ -67,8 +78,6 @@ main
 				o.push("u8[",ba,"] = (u8[",ba,"] & (",0xFF << l,")) | (v >> ",s,");");
 			}
 		
-			console.log(o.join(''));
-
 			return (new Function("u8", "v", o.join(''))).bind(null, u8);
 		}
 
@@ -100,14 +109,30 @@ main
 		}
 
 		function signed(bits, byteAddress, bitOffset) {
-			var o = unsigned(bits, byteAddress, bitOffset),
-				pg = o.get;
-
-			// Unsigned 32 is always signed
-			if (bits !== 32) {
-				var top = 32 - bits;
-				o.get = function () { return pg() << top >> top; };
+			if (!bitOffset) {
+				switch (bits) {
+				case 8:
+					return {
+						get: function () { return s8[byteAddress]; },
+						set: function (v) { s8[byteAddress] = v; }
+					}
+				case 16:
+					return {
+						get: function () { return dv.getInt16(byteAddress, true); },
+						set: function (v) { dv.setInt16(byteAddress, v, true); }
+					}
+				case 32:
+					return {
+						get: function () { return dv.getInt32(byteAddress, true); },
+						set: function (v) { dv.setInt32(byteAddress, v, true); }
+					}
+				}
 			}
+
+			return {
+				get: readBits(bits, byteAddress, bitOffset, true),
+				set: writeBits(bits, byteAddress, bitOffset)
+			};
 
 			return o;
 		}
