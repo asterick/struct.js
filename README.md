@@ -60,6 +60,19 @@ Creates an overlaid grouping.  This is much like the ```struct``` type, except
 all the fields share the same bit position.  This structure's size is determined
 by the maximum size of it's individual fields.
 
+#### Arrays
+
+All fields my be packed into an array type.  This creates a bit packed grouping of values.
+
+	```unsigned:32 myArray[32]```
+
+Arrays may also be group by additional array in minor to major order.
+
+ 	```unsigned:1 bitmap[8][8]```
+
+In this case, ```bitmap[1][0]``` falls before ```bitmap[0][1]``` inside of the the low-level
+array buffer.
+
 ### Example (structure)
 
 	{
