@@ -133,26 +133,6 @@ main
 		}
 
 		function unsigned(little, bits, byteAddress, bitOffset) {
-			if (!bitOffset) {
-				switch (bits) {
-				case 8:
-					return {
-						get: function () { return u8[byteAddress]; },
-						set: function (v) { u8[byteAddress] = v; }
-					}
-				case 16:
-					return {
-						get: function () { return dv.getUint16(byteAddress, little); },
-						set: function (v) { dv.setUint16(byteAddress, v, little); }
-					}
-				case 32:
-					return {
-						get: function () { return dv.getUint32(byteAddress, little); },
-						set: function (v) { dv.setUint32(byteAddress, v, little); }
-					}
-				}
-			}
-
 			return {
 				get: readBits(little, bits, byteAddress, bitOffset, false),
 				set: writeBits(little, bits, byteAddress, bitOffset)
@@ -160,32 +140,10 @@ main
 		}
 
 		function signed(little, bits, byteAddress, bitOffset) {
-			if (!bitOffset) {
-				switch (bits) {
-				case 8:
-					return {
-						get: function () { return s8[byteAddress]; },
-						set: function (v) { s8[byteAddress] = v; }
-					}
-				case 16:
-					return {
-						get: function () { return dv.getInt16(byteAddress, little); },
-						set: function (v) { dv.setInt16(byteAddress, v, little); }
-					}
-				case 32:
-					return {
-						get: function () { return dv.getInt32(byteAddress, little); },
-						set: function (v) { dv.setInt32(byteAddress, v, little); }
-					}
-				}
-			}
-
 			return {
 				get: readBits(little, bits, byteAddress, bitOffset, true),
 				set: writeBits(little, bits, byteAddress, bitOffset)
 			};
-
-			return o;
 		}
 
 		function float(little, bits, byteAddress, bitOffset) {
