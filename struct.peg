@@ -8,7 +8,8 @@ main
 	return function (data) {
 		if (!data) { data = new ArrayBuffer(Math.ceil(structure.size/8)); }
 
-		var dv = new DataView(data),
+		var bottomup = structure.packing === "bottom",
+			dv = new DataView(data),
 			u8 = new Uint8Array(data),
 			s8 = new Int8Array(data),
 			ta = new ArrayBuffer(8),
@@ -21,33 +22,60 @@ main
 			var ba = byteAddress,
 				o = ["var v = 0;"];
 
+			function top(bits, limit) {
+				var o = "u8[" + ba + "] >>" + (8-bits);
+
+				if (limit < bits) {
+					o = "(" + o + ") & "  + ((1<<limit) - 1);
+				}
+
+				return o;
+			}
+
+			function bottom(bits, limit) {
+				var o = "u8[" + ba + "] & " + ((1 << Math.min(bits,limit)) - 1);
+
+				if (limit < bits) {
+					o = "(" + o + ") >>" + (bits - limit);
+				}
+
+				return o;
+			}
+
+			function shift(s, a) {
+				if (a == 0) return s;
+				return "(" + s + ") << " + a;
+			}
+
 			if (little) {
 				var l = bits,
 					s = 0;
 					
 				if (bitOffset) {
-					o.push("v = u8[", ba++, "] >> ", bitOffset, ";");
 					s = 8 - bitOffset;
+					o.push("v = ", (bottomup ? top : bottom)(8 - bitOffset, l), ";");
 					l -= s;
+					ba++;
 				}
 
 				while (l >= 8) {
-					o.push("v |= u8[", ba++, "] << ", s, ";");
+					o.push("v |= ", shift("u8[" + (ba++) + "]", s), ";");
 					s += 8;
 					l -= 8;
 				}
 
 				if (l > 0) {
-					o.push("v |= (u8[", ba, "] & ", (1 << l) - 1,") << ", s,";");
+					o.push("v |= ", shift((bottomup ? bottom : top)(l, l),s), ";");
 				}
 			} else {
 				var s = bits,
 					l = bits;
 
 				if (bitOffset) {
-					o.push("v |= (u8[", ba++, "] & ", 0xFF << bitOffset,") << ", bits - 8, ";");
 					s -= (8 - bitOffset);
+					o.push("v = ", shift((bottomup ? top : bottom)(8-bitOffset, l),s), ";");
 					l -= (8 - bitOffset);
+					ba++;
 				}
 
 				while (l >= 8) {
@@ -57,7 +85,7 @@ main
 				}
 
 				if (l > 0) {
-					o.push("v |= u8[", ba++, "] & ", (1 << l) - 1, ";");
+					o.push("v |= ", (bottomup ? bottom : top)(l, l), ";");
 				}
 			}
 
@@ -76,22 +104,47 @@ main
 				}
 			}
 
+			console.log(o.join(''));
+
 			return (new Function("u8", o.join(''))).bind(null, u8);
 		}
 
 		// This is currently only little endian
 		function writeBits(little, bits, byteAddress, bitOffset) {
 			var mask = (bits == 32) ? 0xFFFFFFFF : ((1 << bits) - 1),
-				o = ["v &= ", mask, ";"],
-				ba = byteAddress;
-								
+				ba = byteAddress,
+				o = [];
+
+			function top(bits, limit, v) {
+				var mask = ((0xFF >> bits) | (0xFF00 << limit)) & 0xFF;
+
+				return "(u8[" + ba + "] & " + mask + ") | "
+					 + "((" + v + " << " + (8-bits) + ") & " + ~mask + ");";
+			}
+
+			function bottom(bits, limit, v) {
+				var mask = (0xFF << bits);
+
+				if (limit < bits) {
+					mask |= (1 << (bits - limit)) - 1;
+
+					v = "(" + v + " << " + (bits - limit) + ")";
+				}
+
+				return "(u8[" + ba + "] & " + mask + ") | (" + v + " & " + ~mask + ");";
+			}
+
+			function shift(v, a) {
+				if (a) { return "(" + v + " >> " + a + ")"; }
+				return v;
+			}
 
 			if (little) {
 				var l = bits,
 					s = 0;
 
 				if (bitOffset) {
-					o.push("u8[",ba,"] = (u8[",ba,"] & ~(",mask << bitOffset,")) | (v << ",bitOffset,");");
+					o.push("u8[",ba,"] = ", (bottomup ? top : bottom)(8-bitOffset, l, "v"));
 					s = 8 - bitOffset;
 					l -= s;
 					ba++;
@@ -104,20 +157,18 @@ main
 				}
 
 				if (l > 0) {
-					o.push("u8[",ba,"] = (u8[",ba,"] & (",0xFF << l,")) | (v >> ",s,");");
+					o.push("u8[",ba,"] = ", (bottomup ? bottom : top)(l, l, shift("v", s)));
 				}
 			} else {
 				var l = bits,
-					s = bits,
-					t;
+					s = bits;
 
 				if (bitOffset) {
-					t = (1 << bitOffset) - 1;
-
-					o.push("u8[",ba,"] = (u8[",ba,"] & ", t, ") | ((v >>", bits - 8,") & ", ~t,");")
-
 					l -= (8-bitOffset);
 					s -= (8-bitOffset);
+
+					o.push("u8[",ba,"] = ", (bottomup ? top : bottom)(8-bitOffset, l, shift("v", s)));
+
 					ba++;
 				}
 
@@ -129,10 +180,12 @@ main
 
 				if (l > 0) {
 					t = (1 << l) - 1;
-					o.push("u8[",ba,"] = (u8[", ba,"] & ", ~t, ") | (v & ", t,");");
+					o.push("u8[",ba,"] = ", (bottomup ? bottom : top)(l, l, "v"));
 				}
 			}
 		
+			console.log(o.join(''));
+
 			return (new Function("u8", "v", o.join(''))).bind(null, u8);
 		}
 
@@ -253,8 +306,6 @@ main
 			return that;
 		}
 
-		console.log(structure.packing)
-
 		return new Struct(data, structure.fields, 0);
 	};
 }
@@ -268,12 +319,12 @@ top_level
 		{ return { packing: p, fields: f, size: f.size }; }
 
 packing
-	= "topdown"i _
-		{ return "topdown"; }
-	/ "bottomup"i _
-		{ return "bottomup"; }
+	= "top"i _
+		{ return "top"; }
+	/ "bottom"i _
+		{ return "bottom"; }
 	/ _
-		{ return "bottomup"; }
+		{ return "bottom"; }
 
 fieldset
 	= "{" _ f:sized* "}" _
@@ -351,8 +402,6 @@ identifier
 integer
 	= a:[1-9] b:[0-9]* _
 		{ return parseInt(a + b.join(''), 10); }
-	/ "0" _
-		{ return 0; }
 
 _
 	= ws*

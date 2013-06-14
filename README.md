@@ -26,8 +26,16 @@ curly braces. C style comments are supported.
 
 #### Top level structure (field group)
 
-Field groups allow you to specify multiple fields for the top-level struct, unions 
-and structs.  Semi-colons are optional for seperating fields.
+```[top / bottom]? [FieldGroup]```
+
+The top level structure is simply a field group, with an optional bit packing identifier.
+
+By default bottom up packing is used, implying that the first field is encoded in the least
+significant bits of a field first.
+
+Field groups are named identifiers surrounded by parentheses allow you to specify 
+multiple fields for the top-level struct, unions and structs.  
+Semi-colons are optional for seperating fields.  
 
 	{
 		... fields go here ...
