@@ -72,8 +72,6 @@ main
 				}
 			}
 
-
-			console.log(o.join(''));
 			return (new Function("u8", o.join(''))).bind(null, u8);
 		}
 
