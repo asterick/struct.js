@@ -1,11 +1,8 @@
 {
   "name": "struct.js",
   "version": "0.1.0",
-  "description": "struct.js\r =========",
+  "description": "Strongly typed structures for javascript",
   "main": "struct.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
   "repository": {
     "type": "git",
     "url": "https://github.com/asterick/struct.js.git"
@@ -16,5 +13,10 @@
   "gitHead": "53b2e5caaa29d003908ce3b0ebbac9998957453f",
   "bugs": {
     "url": "https://github.com/asterick/struct.js/issues"
+  },
+  "dependencies": {
+    "pegjs": "~0.7.0",
+    "grunt-peg": "~0.2.0",
+    "grunt-contrib-watch": "~0.4.4"
   }
 }
