@@ -14,7 +14,7 @@ main
 			o = ["var v = 0;"];
 
 		function top(bits, limit) {
-			var o = "this._u8[" + ba + "] >>" + (8-bits);
+			var o = "this.$u8[" + ba + "] >>" + (8-bits);
 
 			if (limit < bits) {
 				o = "(" + o + ") & "  + ((1<<limit) - 1);
@@ -24,7 +24,7 @@ main
 		}
 
 		function bottom(bits, limit) {
-			var o = "this._u8[" + ba + "] & " + ((1 << Math.min(bits,limit)) - 1);
+			var o = "this.$u8[" + ba + "] & " + ((1 << Math.min(bits,limit)) - 1);
 
 			if (limit < bits) {
 				o = "(" + o + ") >>" + (bits - limit);
@@ -50,7 +50,7 @@ main
 			}
 
 			while (l >= 8) {
-				o.push("v |= ", shift("this._u8[" + (ba++) + "]", s), ";");
+				o.push("v |= ", shift("this.$u8[" + (ba++) + "]", s), ";");
 				s += 8;
 				l -= 8;
 			}
@@ -72,7 +72,7 @@ main
 			while (l >= 8) {
 				s -= 8;
 				l -= 8;
-				o.push("v |= this._u8[", ba++, "] << ", s, ";");
+				o.push("v |= this.$u8[", ba++, "] << ", s, ";");
 			}
 
 			if (l > 0) {
@@ -92,7 +92,7 @@ main
 		function top(bits, limit, v) {
 			var mask = ((0xFF >> bits) | (0xFF00 << limit)) & 0xFF;
 
-			return "(this._u8[" + ba + "] & " + mask + ") | "
+			return "(this.$u8[" + ba + "] & " + mask + ") | "
 				 + "((" + v + " << " + (8-bits) + ") & " + ~mask + ");";
 		}
 
@@ -105,7 +105,7 @@ main
 				v = "(" + v + " << " + (bits - limit) + ")";
 			}
 
-			return "(this._u8[" + ba + "] & " + mask + ") | (" + v + " & " + ~mask + ");";
+			return "(this.$u8[" + ba + "] & " + mask + ") | (" + v + " & " + ~mask + ");";
 		}
 
 		function shift(v, a) {
@@ -118,20 +118,20 @@ main
 				s = 0;
 
 			if (bitOffset) {
-				o.push("this._u8[",ba,"] = ", (bottomup ? top : bottom)(8-bitOffset, l, "v"));
+				o.push("this.$u8[",ba,"] = ", (bottomup ? top : bottom)(8-bitOffset, l, "v"));
 				s = 8 - bitOffset;
 				l -= s;
 				ba++;
 			}
 
 			while (l >= 8) {
-				o.push("this._u8[",ba++,"] = v >> ", s, ";");
+				o.push("this.$u8[",ba++,"] = v >> ", s, ";");
 				s += 8;
 				l -= 8;
 			}
 
 			if (l > 0) {
-				o.push("this._u8[",ba,"] = ", (bottomup ? bottom : top)(l, l, shift("v", s)));
+				o.push("this.$u8[",ba,"] = ", (bottomup ? bottom : top)(l, l, shift("v", s)));
 			}
 		} else {
 			var l = bits,
@@ -141,7 +141,7 @@ main
 				l -= (8-bitOffset);
 				s -= (8-bitOffset);
 
-				o.push("this._u8[",ba,"] = ", (bottomup ? top : bottom)(8-bitOffset, l, shift("v", s)));
+				o.push("this.$u8[",ba,"] = ", (bottomup ? top : bottom)(8-bitOffset, l, shift("v", s)));
 
 				ba++;
 			}
@@ -149,12 +149,12 @@ main
 			while (l >= 8) {
 				s -= 8;
 				l -= 8;
-				o.push("this._u8[", ba++, "] = v >> ", s, ";");
+				o.push("this.$u8[", ba++, "] = v >> ", s, ";");
 			}
 
 			if (l > 0) {
 				t = (1 << l) - 1;
-				o.push("this._u8[",ba,"] = ", (bottomup ? bottom : top)(l, l, "v"));
+				o.push("this.$u8[",ba,"] = ", (bottomup ? bottom : top)(l, l, "v"));
 			}
 		}
 	
@@ -192,18 +192,17 @@ main
 	}
 
 	function float(little, bits, byteAddress, bitOffset) {
-
 		if (!bitOffset) {
 			switch (bits) {
 			case 32:
 				return {
-					get: function () { return this._dv.getFloat32(byteAddress, little); },
-					set: function (v) { this._dv.setFloat32(byteAddress, v, little); }
+					get: function () { return this.$dv.getFloat32(byteAddress, little); },
+					set: function (v) { this.$dv.setFloat32(byteAddress, v, little); }
 				}
 			case 64:
 				return {
-					get: function () { return this._dv.getFloat64(byteAddress, little); },
-					set: function (v) { this._dv.setFloat64(byteAddress, v, little); }
+					get: function () { return this.$dv.getFloat64(byteAddress, little); },
+					set: function (v) { this.$dv.setFloat64(byteAddress, v, little); }
 				}
 			}
 		}
@@ -295,7 +294,7 @@ main
 
 	function struct(field, offset) {
 		var accessors = globals(),
-			chain = ["this._u8 = u8; this._dv = dv;"];
+			chain = ["this.$u8 = u8; this.$dv = dv;"];
 
 		field.fields.forEach(function (field) {
 			var simple = accessor(accessors, field, field.offset + offset);
@@ -311,7 +310,7 @@ main
 
 	function array(field, offset) {
 		var accessors = globals(),
-			chain = ["this._u8 = u8; this._dv = dv;"];
+			chain = ["this.$u8 = u8; this.$dv = dv;"];
 
 		for (var i = 0; i < field.count; i++) {
 			var simple = accessor(accessors, field.field, offset + field.field.size * i, i);
@@ -338,6 +337,7 @@ main
 			s = new tlc(u8, dv);
 
 		s._data = data;
+		s._size = bytes;
 
 		return s;
 	};
