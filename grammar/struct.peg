@@ -9,7 +9,7 @@ main
 		tdv = new DataView(new ArrayBuffer(8));
 
 	// This is currently only little endian
-	function readBits(little, bits, byteAddress, bitOffset, signed) {
+	function readBits(little, bits, byteAddress, bitOffset) {
 		var ba = byteAddress,
 			o = ["var v = 0;"];
 
@@ -78,14 +78,6 @@ main
 			if (l > 0) {
 				o.push("v |= ", (bottomup ? bottom : top)(l, l), ";");
 			}
-		}
-
-		if (bits !== 32) {
-			 if (signed) {
-			 	o.push("v = v << ", 32 - bits, ">> ", 32 - bits,";");
-			 }
-		} else if (!signed) {
-			o.push("v = (v & 0x80000000) ? (v + 0x100000000) : v;");
 		}
 
 		return o.join('');
@@ -170,15 +162,31 @@ main
 	}
 
 	function unsigned(little, bits, byteAddress, bitOffset) {
+		var r = readBits(little, bits, byteAddress, bitOffset);
+
+		if (bits === 32) {
+			r = "return (v & 0x80000000) ? (v + 0x100000000) : v;";
+		} else {
+			r = "return v;"
+		}
+
 		return {
-			get: new Function(readBits(little, bits, byteAddress, bitOffset, false) + "return v;"),
+			get: new Function(r),
 			set: new Function("v", writeBits(little, bits, byteAddress, bitOffset))
 		};
 	}
 
 	function signed(little, bits, byteAddress, bitOffset) {
+		var r = readBits(little, bits, byteAddress, bitOffset);
+
+		if (bits !== 32) {
+		 	r = "return v << " + (32 - bits) + " >> " + (32 - bits) + ";";
+		} else {
+			r = "return v;";
+		}
+
 		return {
-			get: new Function(readBits(little, bits, byteAddress, bitOffset, true) + "return v;"),
+			get: new Function(r),
 			set: new Function("v", writeBits(little, bits, byteAddress, bitOffset))
 		};
 	}
