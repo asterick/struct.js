@@ -5,287 +5,333 @@
 main
 	= _ structure:top_level
 {
-	return function (data) {
-		if (!data) { data = new ArrayBuffer(Math.ceil(structure.size/8)); }
+	var bottomup = structure.packing === "bottom",
+		tdv = new DataView(new ArrayBuffer(8));
 
-		var bottomup = structure.packing === "bottom",
-			dv = new DataView(data),
-			u8 = new Uint8Array(data),
-			ta = new ArrayBuffer(8),
-			tdv = new DataView(ta);
+	// This is currently only little endian
+	function readBits(little, bits, byteAddress, bitOffset, signed) {
+		var ba = byteAddress,
+			o = ["var v = 0;"];
 
-		// This is currently only little endian
-		function readBits(little, bits, byteAddress, bitOffset, signed) {
-			var ba = byteAddress,
-				o = ["var v = 0;"];
+		function top(bits, limit) {
+			var o = "this._u8[" + ba + "] >>" + (8-bits);
 
-			function top(bits, limit) {
-				var o = "this._u8[" + ba + "] >>" + (8-bits);
-
-				if (limit < bits) {
-					o = "(" + o + ") & "  + ((1<<limit) - 1);
-				}
-
-				return o;
+			if (limit < bits) {
+				o = "(" + o + ") & "  + ((1<<limit) - 1);
 			}
 
-			function bottom(bits, limit) {
-				var o = "this._u8[" + ba + "] & " + ((1 << Math.min(bits,limit)) - 1);
-
-				if (limit < bits) {
-					o = "(" + o + ") >>" + (bits - limit);
-				}
-
-				return o;
-			}
-
-			function shift(s, a) {
-				if (a == 0) return s;
-				return "(" + s + ") << " + a;
-			}
-
-			if (little) {
-				var l = bits,
-					s = 0;
-					
-				if (bitOffset) {
-					s = 8 - bitOffset;
-					o.push("v = ", (bottomup ? top : bottom)(8 - bitOffset, l), ";");
-					l -= s;
-					ba++;
-				}
-
-				while (l >= 8) {
-					o.push("v |= ", shift("this._u8[" + (ba++) + "]", s), ";");
-					s += 8;
-					l -= 8;
-				}
-
-				if (l > 0) {
-					o.push("v |= ", shift((bottomup ? bottom : top)(l, l),s), ";");
-				}
-			} else {
-				var s = bits,
-					l = bits;
-
-				if (bitOffset) {
-					s -= (8 - bitOffset);
-					o.push("v = ", shift((bottomup ? top : bottom)(8-bitOffset, l),s), ";");
-					l -= (8 - bitOffset);
-					ba++;
-				}
-
-				while (l >= 8) {
-					s -= 8;
-					l -= 8;
-					o.push("v |= this._u8[", ba++, "] << ", s, ";");
-				}
-
-				if (l > 0) {
-					o.push("v |= ", (bottomup ? bottom : top)(l, l), ";");
-				}
-			}
-
-			if (bits !== 32) {
-				 if (signed) {
-				 	o.push("v = v << ", 32 - bits, ">> ", 32 - bits,";");
-				 }
-			} else if (!signed) {
-				o.push("v = (v & 0x80000000) ? (v + 0x100000000) : v;");
-			}
-
-			return o.join('');
+			return o;
 		}
 
-		// This is currently only little endian
-		function writeBits(little, bits, byteAddress, bitOffset) {
-			var mask = (bits == 32) ? 0xFFFFFFFF : ((1 << bits) - 1),
-				ba = byteAddress,
-				o = [];
+		function bottom(bits, limit) {
+			var o = "this._u8[" + ba + "] & " + ((1 << Math.min(bits,limit)) - 1);
 
-			function top(bits, limit, v) {
-				var mask = ((0xFF >> bits) | (0xFF00 << limit)) & 0xFF;
-
-				return "(this._u8[" + ba + "] & " + mask + ") | "
-					 + "((" + v + " << " + (8-bits) + ") & " + ~mask + ");";
+			if (limit < bits) {
+				o = "(" + o + ") >>" + (bits - limit);
 			}
 
-			function bottom(bits, limit, v) {
-				var mask = (0xFF << bits);
-
-				if (limit < bits) {
-					mask |= (1 << (bits - limit)) - 1;
-
-					v = "(" + v + " << " + (bits - limit) + ")";
-				}
-
-				return "(this._u8[" + ba + "] & " + mask + ") | (" + v + " & " + ~mask + ");";
-			}
-
-			function shift(v, a) {
-				if (a) { return "(" + v + " >> " + a + ")"; }
-				return v;
-			}
-
-			if (little) {
-				var l = bits,
-					s = 0;
-
-				if (bitOffset) {
-					o.push("this._u8[",ba,"] = ", (bottomup ? top : bottom)(8-bitOffset, l, "v"));
-					s = 8 - bitOffset;
-					l -= s;
-					ba++;
-				}
-
-				while (l >= 8) {
-					o.push("this._u8[",ba++,"] = v >> ", s, ";");
-					s += 8;
-					l -= 8;
-				}
-
-				if (l > 0) {
-					o.push("this._u8[",ba,"] = ", (bottomup ? bottom : top)(l, l, shift("v", s)));
-				}
-			} else {
-				var l = bits,
-					s = bits;
-
-				if (bitOffset) {
-					l -= (8-bitOffset);
-					s -= (8-bitOffset);
-
-					o.push("this._u8[",ba,"] = ", (bottomup ? top : bottom)(8-bitOffset, l, shift("v", s)));
-
-					ba++;
-				}
-
-				while (l >= 8) {
-					s -= 8;
-					l -= 8;
-					o.push("this._u8[", ba++, "] = v >> ", s, ";");
-				}
-
-				if (l > 0) {
-					t = (1 << l) - 1;
-					o.push("this._u8[",ba,"] = ", (bottomup ? bottom : top)(l, l, "v"));
-				}
-			}
-		
-			return o.join('');
+			return o;
 		}
 
-		function unsigned(little, bits, byteAddress, bitOffset) {
-			return {
-				get: new Function(readBits(little, bits, byteAddress, bitOffset, false) + "return v;"),
-				set: new Function("v", writeBits(little, bits, byteAddress, bitOffset))
-			};
+		function shift(s, a) {
+			if (a == 0) return s;
+			return "(" + s + ") << " + a;
 		}
 
-		function signed(little, bits, byteAddress, bitOffset) {
-			return {
-				get: new Function(readBits(little, bits, byteAddress, bitOffset, true) + "return v;"),
-				set: new Function("v", writeBits(little, bits, byteAddress, bitOffset))
-			};
+		if (little) {
+			var l = bits,
+				s = 0;
+				
+			if (bitOffset) {
+				s = 8 - bitOffset;
+				o.push("v = ", (bottomup ? top : bottom)(8 - bitOffset, l), ";");
+				l -= s;
+				ba++;
+			}
+
+			while (l >= 8) {
+				o.push("v |= ", shift("this._u8[" + (ba++) + "]", s), ";");
+				s += 8;
+				l -= 8;
+			}
+
+			if (l > 0) {
+				o.push("v |= ", shift((bottomup ? bottom : top)(l, l),s), ";");
+			}
+		} else {
+			var s = bits,
+				l = bits;
+
+			if (bitOffset) {
+				s -= (8 - bitOffset);
+				o.push("v = ", shift((bottomup ? top : bottom)(8-bitOffset, l),s), ";");
+				l -= (8 - bitOffset);
+				ba++;
+			}
+
+			while (l >= 8) {
+				s -= 8;
+				l -= 8;
+				o.push("v |= this._u8[", ba++, "] << ", s, ";");
+			}
+
+			if (l > 0) {
+				o.push("v |= ", (bottomup ? bottom : top)(l, l), ";");
+			}
 		}
 
-		function float(little, bits, byteAddress, bitOffset) {
-			if (!bitOffset) {
-				switch (bits) {
-				case 32:
-					return {
-						get: function () { return dv.getFloat32(byteAddress, little); },
-						set: function (v) { dv.setFloat32(byteAddress, v, little); }
-					}
-				case 64:
-					return {
-						get: function () { return dv.getFloat64(byteAddress, little); },
-						set: function (v) { dv.setFloat64(byteAddress, v, little); }
-					}
-				}
+		if (bits !== 32) {
+			 if (signed) {
+			 	o.push("v = v << ", 32 - bits, ">> ", 32 - bits,";");
+			 }
+		} else if (!signed) {
+			o.push("v = (v & 0x80000000) ? (v + 0x100000000) : v;");
+		}
+
+		return o.join('');
+	}
+
+	// This is currently only little endian
+	function writeBits(little, bits, byteAddress, bitOffset) {
+		var mask = (bits == 32) ? 0xFFFFFFFF : ((1 << bits) - 1),
+			ba = byteAddress,
+			o = [];
+
+		function top(bits, limit, v) {
+			var mask = ((0xFF >> bits) | (0xFF00 << limit)) & 0xFF;
+
+			return "(this._u8[" + ba + "] & " + mask + ") | "
+				 + "((" + v + " << " + (8-bits) + ") & " + ~mask + ");";
+		}
+
+		function bottom(bits, limit, v) {
+			var mask = (0xFF << bits);
+
+			if (limit < bits) {
+				mask |= (1 << (bits - limit)) - 1;
+
+				v = "(" + v + " << " + (bits - limit) + ")";
 			}
 
-			var rl, rh, wl, wh; 
-			
-			if (little || bits != 64) {
-				rl = readBits(little, 32, byteAddress, bitOffset),
-				wl = writeBits(little, 32, byteAddress, bitOffset),
-				rh = readBits(little, 32, byteAddress + 4, bitOffset), 
-				wh = writeBits(little, 32, byteAddress + 4, bitOffset);
-			} else {
-				rh = readBits(little, 32, byteAddress, bitOffset),
-				wh = writeBits(little, 32, byteAddress, bitOffset),
-				rl = readBits(little, 32, byteAddress + 4, bitOffset), 
-				wl = writeBits(little, 32, byteAddress + 4, bitOffset);
+			return "(this._u8[" + ba + "] & " + mask + ") | (" + v + " & " + ~mask + ");";
+		}
+
+		function shift(v, a) {
+			if (a) { return "(" + v + " >> " + a + ")"; }
+			return v;
+		}
+
+		if (little) {
+			var l = bits,
+				s = 0;
+
+			if (bitOffset) {
+				o.push("this._u8[",ba,"] = ", (bottomup ? top : bottom)(8-bitOffset, l, "v"));
+				s = 8 - bitOffset;
+				l -= s;
+				ba++;
 			}
 
+			while (l >= 8) {
+				o.push("this._u8[",ba++,"] = v >> ", s, ";");
+				s += 8;
+				l -= 8;
+			}
+
+			if (l > 0) {
+				o.push("this._u8[",ba,"] = ", (bottomup ? bottom : top)(l, l, shift("v", s)));
+			}
+		} else {
+			var l = bits,
+				s = bits;
+
+			if (bitOffset) {
+				l -= (8-bitOffset);
+				s -= (8-bitOffset);
+
+				o.push("this._u8[",ba,"] = ", (bottomup ? top : bottom)(8-bitOffset, l, shift("v", s)));
+
+				ba++;
+			}
+
+			while (l >= 8) {
+				s -= 8;
+				l -= 8;
+				o.push("this._u8[", ba++, "] = v >> ", s, ";");
+			}
+
+			if (l > 0) {
+				t = (1 << l) - 1;
+				o.push("this._u8[",ba,"] = ", (bottomup ? bottom : top)(l, l, "v"));
+			}
+		}
+	
+		return o.join('');
+	}
+
+	function unsigned(little, bits, byteAddress, bitOffset) {
+		return {
+			get: new Function(readBits(little, bits, byteAddress, bitOffset, false) + "return v;"),
+			set: new Function("v", writeBits(little, bits, byteAddress, bitOffset))
+		};
+	}
+
+	function signed(little, bits, byteAddress, bitOffset) {
+		return {
+			get: new Function(readBits(little, bits, byteAddress, bitOffset, true) + "return v;"),
+			set: new Function("v", writeBits(little, bits, byteAddress, bitOffset))
+		};
+	}
+
+	function float(little, bits, byteAddress, bitOffset) {
+
+		if (!bitOffset) {
 			switch (bits) {
-				case 32:
-					return {
-						get: new Function(rl + "this._tdv.setUint32(0, v); return this._tdv.getFloat32(0)"),
-						set: new Function("v", "this._tdv.setFloat32(0, v); v = this._tdv.getUint32(0);" + wl)
-					};
-				case 64:
-					return {
-						get: new Function(rh + "this._tdv.setUint32(0, v);" + rl + "this._tdv.setUint32(4, v);" + "return this._tdv.getFloat64(0)"),
-						set: new Function("v", "this._tdv.setFloat64(0, v); v = this._tdv.getUint32(0);" + wh + "v = this._tdv.getUint32(4);" + wl)
-					};
-			}
-		}
-
-		function fieldDefinition(field, offset) {
-
-			if (field.count) {
-				var array = { _tdv: tdv, _u8: u8 };
-
-				for (var i = 0; i < field.count; i++) {
-					var def = fieldDefinition(field.field, offset + i * field.field.size);
-					if (!def) return ;
-					Object.defineProperty(array, i, def);
+			case 32:
+				return {
+					get: function () { return this._dv.getFloat32(byteAddress, little); },
+					set: function (v) { this._dv.setFloat32(byteAddress, v, little); }
 				}
-
-				return { value: array };
-			}
-
-			switch (field.type) {
-			case 'struct':
-				return { value: new Struct(data, field.fields, offset) };
-			case 'unsigned':
-				return unsigned(field.endian === "little", field.size, Math.floor(offset / 8), offset % 8);
-			case 'signed':
-				return signed(field.endian === "little", field.size, Math.floor(offset / 8), offset % 8);
-			case 'float':
-				return float(field.endian === "little", field.size, Math.floor(offset / 8), offset % 8);
-			case 'union':
-				var union = { _tdv: tdv,  _u8: u8 };
-
-				field.fields.forEach(function (f) {
-					var def = fieldDefinition(f, offset);
-					if (def) Object.defineProperty(union, f.name, def);
-				});
-
-				return { value: union };
+			case 64:
+				return {
+					get: function () { return this._dv.getFloat64(byteAddress, little); },
+					set: function (v) { this._dv.setFloat64(byteAddress, v, little); }
+				}
 			}
 		}
 
-		function Struct(data, fields, offset) {
-			var that = Object.create({
-				_tdv: tdv, 
-				"_u8": u8,
-				"_data": data,
-				"_size": structure.size
-			});
-
-			fields.forEach(function (field) {
-				var def = fieldDefinition(field, field.offset + offset);
-				if (def) Object.defineProperty(that, field.name, def);
-			});
-
-			return that;
+		var rl, rh, wl, wh; 
+		
+		if (little || bits != 64) {
+			rl = readBits(little, 32, byteAddress, bitOffset),
+			wl = writeBits(little, 32, byteAddress, bitOffset),
+			rh = readBits(little, 32, byteAddress + 4, bitOffset), 
+			wh = writeBits(little, 32, byteAddress + 4, bitOffset);
+		} else {
+			rh = readBits(little, 32, byteAddress, bitOffset),
+			wh = writeBits(little, 32, byteAddress, bitOffset),
+			rl = readBits(little, 32, byteAddress + 4, bitOffset), 
+			wl = writeBits(little, 32, byteAddress + 4, bitOffset);
 		}
 
-		console.log(structure);
-		return new Struct(data, structure.fields, 0);
+		switch (bits) {
+			case 32:
+				return {
+					get: new Function(rl + "this._tdv.setUint32(0, v); return this._tdv.getFloat32(0)"),
+					set: new Function("v", "this._tdv.setFloat32(0, v); v = this._tdv.getUint32(0);" + wl)
+				};
+			case 64:
+				return {
+					get: new Function(rh + "this._tdv.setUint32(0, v);" + rl + "this._tdv.setUint32(4, v);" + "return this._tdv.getFloat64(0)"),
+					set: new Function("v", "this._tdv.setFloat64(0, v); v = this._tdv.getUint32(0);" + wh + "v = this._tdv.getUint32(4);" + wl)
+				};
+		}
+	}
+
+	// === Prototype generators ========
+	function globals() {
+		var proto = {};
+
+		Object.defineProperties(proto, {
+			_tdv: { value: tdv }
+		});
+
+		return proto;
+	}
+
+	function isSimple(field) {
+		switch (field.type) {
+		case 'unsigned':
+		case 'signed':
+		case 'float':
+			return true;
+		}
+		return false;
+	}
+
+	function accessor(accessors, field, offset, index) {
+		var byteAddr = Math.floor(offset / 8),
+			bitAddr = offset % 8,
+			def, simple;
+
+		switch (field.type) {
+		case 'unsigned':
+			def = unsigned(field.endian === "little", field.size, byteAddr, bitAddr);
+			simple = true;
+			break ;
+		case 'signed':
+			def = signed(field.endian === "little", field.size, byteAddr, bitAddr);
+			simple = true;
+			break ;
+		case 'float':
+			def = float(field.endian === "little", field.size, byteAddr, bitAddr);
+			simple = true;
+			break ;
+		case 'struct':
+			def = { writable: true, value: struct(field, offset) };
+			simple = false;
+			break ;
+		case 'array':
+			def = { writable: true, value: array(field, offset) };
+			simple = false;
+			break ;
+		case 'void':
+			return true;
+		default:
+			throw new Error("Unknown filed type: " + field.type);
+		}
+
+		Object.defineProperty(accessors, (index !== undefined) ? index : field.name, def);
+		return simple;
+	}
+
+	function struct(field, offset) {
+		var accessors = globals(),
+			chain = ["this._u8 = u8; this._dv = dv;"];
+
+		field.fields.forEach(function (field) {
+			var simple = accessor(accessors, field, field.offset + offset);
+
+			if (!simple) { chain.push("this.", field.name, " = new this.", field.name, "(u8,dv);"); }
+		});
+
+		var f = new Function("u8", "dv", chain.join(""))
+		f.prototype = accessors;
+
+		return f;
+	}
+
+	function array(field, offset) {
+		var accessors = globals(),
+			chain = ["this._u8 = u8; this._dv = dv;"];
+
+		for (var i = 0; i < field.count; i++) {
+			var simple = accessor(accessors, field.field, offset + field.field.size * i, i);
+
+			if (!simple) { chain.push("this[", i, "] = new this[", i, "](u8,dv);"); }
+		}
+
+		var f = new Function("u8", "dv", chain.join(""))
+		f.prototype = accessors;
+
+		return f;
+	}
+
+	// Create constructor
+	var tlc = struct(structure, 0),
+		bytes = Math.ceil(structure.size / 8);
+
+	return function (data) {
+		// Create structure if one is not already defined
+		if (!data) { data = new ArrayBuffer(bytes); }
+
+		var u8 = new Uint8Array(data),
+			dv = new DataView(data),
+			s = new tlc(u8, dv);
+
+		s._data = data;
+
+		return s;
 	};
 }
 
@@ -342,10 +388,11 @@ field
 	/ "union" _ n:identifier f:fieldset
 		{ 
 			var size = f.reduce(function (a, b) {
+				b.offset = 0;
 				return Math.max(a, b.size);
 			}, 0);
 
-			return { type: "union", name: n, fields: f, size: size };
+			return { type: "struct", name: n, fields: f, size: size };
 		}
 	/ "struct" _ n:identifier f:fieldset
 		{
