@@ -111,7 +111,7 @@ main
 			var s = bottomup ? bitOffset : (8 - bitOffset - bits),
 				m = ((1 << bits) - 1) << s;
 
-			o.push("this.$u8[" + ba + "]  = (this.$u8[" + ba + "] & ", ~m, ") | (v & ",m,");");
+			o.push("this.$u8[" + ba + "]  = (this.$u8[" + ba + "] & ", ~m, ") | ((v << ",s,") & ", m,");");
 		} else if (little) {
 			var l = bits,
 				s = 0;
