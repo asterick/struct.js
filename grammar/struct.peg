@@ -11,24 +11,17 @@ main
 	// This is currently only little endian
 	function readBits(little, bits, byteAddress, bitOffset) {
 		var ba = byteAddress,
-			o = ["var v = 0;"];
+			o = ["var v = 0;"],
+			q = 8 - bitOffset;
 
-		function top(bits, limit) {
-			var o = "this.$u8[" + ba + "] >>" + (8-bits);
-
-			if (limit < bits) {
-				o = "(" + o + ") & "  + ((1<<limit) - 1);
-			}
+		function top(bits) {
+			var o = "this.$u8[" + ba + "] >>" + (8 - bits);
 
 			return o;
 		}
 
-		function bottom(bits, limit) {
-			var o = "this.$u8[" + ba + "] & " + ((1 << Math.min(bits,limit)) - 1);
-
-			if (limit < bits) {
-				o = "(" + o + ") >>" + (bits - limit);
-			}
+		function bottom(bits) {
+			var o = "this.$u8[" + ba + "] & " + ((1 << bits) - 1);
 
 			return o;
 		}
@@ -38,13 +31,19 @@ main
 			return "(" + s + ") << " + a;
 		}
 
-		if (little) {
+		// If we can pack this into one byte
+		if (q >= bits) {
+			var m = (1 << bits) - 1,
+				s = bottomup ? bitOffset : (8 - bitOffset - bits);
+
+			o.push("v = (this.$u8[" + ba + "] >> ", s, ") & ", m, ";");
+		} else if (little) {
 			var l = bits,
 				s = 0;
 				
 			if (bitOffset) {
-				s = 8 - bitOffset;
-				o.push("v = ", (bottomup ? top : bottom)(8 - bitOffset, l), ";");
+				s = q;
+				o.push("v = ", (bottomup ? top : bottom)(q), ";");
 				l -= s;
 				ba++;
 			}
@@ -56,16 +55,16 @@ main
 			}
 
 			if (l > 0) {
-				o.push("v |= ", shift((bottomup ? bottom : top)(l, l),s), ";");
+				o.push("v |= ", shift((bottomup ? bottom : top)(l),s), ";");
 			}
 		} else {
 			var s = bits,
 				l = bits;
 
 			if (bitOffset) {
-				s -= (8 - bitOffset);
-				o.push("v = ", shift((bottomup ? top : bottom)(8-bitOffset, l),s), ";");
-				l -= (8 - bitOffset);
+				s -= q;
+				o.push("v = ", shift((bottomup ? top : bottom)(q),s), ";");
+				l -= q;
 				ba++;
 			}
 
@@ -76,7 +75,7 @@ main
 			}
 
 			if (l > 0) {
-				o.push("v |= ", (bottomup ? bottom : top)(l, l), ";");
+				o.push("v |= ", (bottomup ? bottom : top)(l), ";");
 			}
 		}
 
@@ -87,23 +86,18 @@ main
 	function writeBits(little, bits, byteAddress, bitOffset) {
 		var mask = (bits == 32) ? 0xFFFFFFFF : ((1 << bits) - 1),
 			ba = byteAddress,
-			o = [];
+			o = [],
+			q = 8 - bitOffset;
 
-		function top(bits, limit, v) {
-			var mask = ((0xFF >> bits) | (0xFF00 << limit)) & 0xFF;
+		function top(bits, v) {
+			var mask = 0xFF >> bits;
 
 			return "(this.$u8[" + ba + "] & " + mask + ") | "
 				 + "((" + v + " << " + (8-bits) + ") & " + ~mask + ");";
 		}
 
-		function bottom(bits, limit, v) {
-			var mask = (0xFF << bits);
-
-			if (limit < bits) {
-				mask |= (1 << (bits - limit)) - 1;
-
-				v = "(" + v + " << " + (bits - limit) + ")";
-			}
+		function bottom(bits, v) {
+			var mask = (0xFF << bits) & 0xFF;
 
 			return "(this.$u8[" + ba + "] & " + mask + ") | (" + v + " & " + ~mask + ");";
 		}
@@ -113,13 +107,18 @@ main
 			return v;
 		}
 
-		if (little) {
+		if (q >= bits) {
+			var s = bottomup ? bitOffset : (8 - bitOffset - bits),
+				m = ((1 << bits) - 1) << s;
+
+			o.push("this.$u8[" + ba + "]  = (this.$u8[" + ba + "] & ", ~m, ") | (v & ",m,");");
+		} else if (little) {
 			var l = bits,
 				s = 0;
 
 			if (bitOffset) {
-				o.push("this.$u8[",ba,"] = ", (bottomup ? top : bottom)(8-bitOffset, l, "v"));
-				s = 8 - bitOffset;
+				o.push("this.$u8[",ba,"] = ", (bottomup ? top : bottom)(q, "v"));
+				s = q;
 				l -= s;
 				ba++;
 			}
@@ -131,17 +130,17 @@ main
 			}
 
 			if (l > 0) {
-				o.push("this.$u8[",ba,"] = ", (bottomup ? bottom : top)(l, l, shift("v", s)));
+				o.push("this.$u8[",ba,"] = ", (bottomup ? bottom : top)(l, shift("v", s)));
 			}
 		} else {
 			var l = bits,
 				s = bits;
 
 			if (bitOffset) {
-				l -= (8-bitOffset);
-				s -= (8-bitOffset);
+				l -= q;
+				s -= q;
 
-				o.push("this.$u8[",ba,"] = ", (bottomup ? top : bottom)(8-bitOffset, l, shift("v", s)));
+				o.push("this.$u8[",ba,"] = ", (bottomup ? top : bottom)(q, shift("v", s)));
 
 				ba++;
 			}
@@ -154,7 +153,7 @@ main
 
 			if (l > 0) {
 				t = (1 << l) - 1;
-				o.push("this.$u8[",ba,"] = ", (bottomup ? bottom : top)(l, l, "v"));
+				o.push("this.$u8[",ba,"] = ", (bottomup ? bottom : top)(l, "v"));
 			}
 		}
 	
@@ -162,32 +161,34 @@ main
 	}
 
 	function unsigned(little, bits, byteAddress, bitOffset) {
-		var r = readBits(little, bits, byteAddress, bitOffset);
+		var r = readBits(little, bits, byteAddress, bitOffset),
+			w = writeBits(little, bits, byteAddress, bitOffset);
 
 		if (bits === 32) {
-			r = "return (v & 0x80000000) ? (v + 0x100000000) : v;";
+			r += "return (v & 0x80000000) ? (v + 0x100000000) : v;";
 		} else {
-			r = "return v;"
+			r += "return v;"
 		}
 
 		return {
 			get: new Function(r),
-			set: new Function("v", writeBits(little, bits, byteAddress, bitOffset))
+			set: new Function("v", w)
 		};
 	}
 
 	function signed(little, bits, byteAddress, bitOffset) {
-		var r = readBits(little, bits, byteAddress, bitOffset);
+		var r = readBits(little, bits, byteAddress, bitOffset),
+			w = writeBits(little, bits, byteAddress, bitOffset);
 
 		if (bits !== 32) {
-		 	r = "return v << " + (32 - bits) + " >> " + (32 - bits) + ";";
+		 	r += "return v << " + (32 - bits) + " >> " + (32 - bits) + ";";
 		} else {
-			r = "return v;";
+			r += "return v;";
 		}
 
 		return {
 			get: new Function(r),
-			set: new Function("v", writeBits(little, bits, byteAddress, bitOffset))
+			set: new Function("v", w)
 		};
 	}
 
@@ -302,6 +303,8 @@ main
 			if (!simple) { chain.push("this.", field.name, " = new this.", field.name, "(u8,dv);"); }
 		});
 
+		Object.defineProperty(accessors, "_size", { value: Math.ceil(field.size / 8) });
+
 		var f = new Function("u8", "dv", chain.join(""))
 		f.prototype = accessors;
 
@@ -321,6 +324,8 @@ main
 		var f = new Function("u8", "dv", chain.join(""))
 		f.prototype = accessors;
 
+		Object.defineProperty(accessors, "_size", { value: Math.ceil(field.field.size * field.count / 8) });
+
 		return f;
 	}
 
@@ -329,15 +334,17 @@ main
 		bytes = Math.ceil(structure.size / 8);
 
 	return function (data) {
-		// Create structure if one is not already defined
-		if (!data) { data = new ArrayBuffer(bytes); }
+		if (!data) {
+			data = new ArrayBuffer(bytes);
+		} else if (data.byteLength < bytes) {
+			throw new Error("ArrayBuffer is below minimum length");
+		}
 
 		var u8 = new Uint8Array(data),
 			dv = new DataView(data),
 			s = new tlc(u8, dv);
 
 		s._data = data;
-		s._size = bytes;
 
 		return s;
 	};
