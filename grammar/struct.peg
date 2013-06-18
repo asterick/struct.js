@@ -5,7 +5,9 @@
 main
 	= _ structure:top_level
 {
-	var bottomup = structure.packing === "bottom",
+	var default_packing = "bottom",
+		default_endian = "little",
+		bottomup = ((structure.packing || default_packing) === "bottom"),
 		tdv = new DataView(new ArrayBuffer(8));
 
 	// This is currently only little endian
@@ -260,19 +262,21 @@ main
 	function accessor(accessors, field, offset, index) {
 		var byteAddr = Math.floor(offset / 8),
 			bitAddr = offset % 8,
-			def, simple;
+			littleEndian, def, simple;
+
+		littleEndian = ((field.endian || structure.endian || default_endian) === "little");
 
 		switch (field.type) {
 		case 'unsigned':
-			def = unsigned(field.endian === "little", field.size, byteAddr, bitAddr);
+			def = unsigned(littleEndian, field.size, byteAddr, bitAddr);
 			simple = true;
 			break ;
 		case 'signed':
-			def = signed(field.endian === "little", field.size, byteAddr, bitAddr);
+			def = signed(littleEndian, field.size, byteAddr, bitAddr);
 			simple = true;
 			break ;
 		case 'float':
-			def = float(field.endian === "little", field.size, byteAddr, bitAddr);
+			def = float(littleEndian, field.size, byteAddr, bitAddr);
 			simple = true;
 			break ;
 		case 'struct':
@@ -355,16 +359,22 @@ main
  **/
 
 top_level
-	= p:packing f:fieldset
-		{ return { packing: p, fields: f, size: f.size }; }
+	= p:packing? e:endian? f:fieldset
+		{ return { packing: p, endian: e, fields: f, size: f.size }; }
+	/ e:endian? p:packing? f:fieldset
+		{ return { packing: p, endian: e, fields: f, size: f.size }; }
 
 packing
 	= "top"i _
 		{ return "top"; }
 	/ "bottom"i _
 		{ return "bottom"; }
-	/ _
-		{ return "bottom"; }
+
+endian
+	= "big"i _
+		{ return "big"; }
+	/ "little"i _
+		{ return "little"; }
 
 fieldset
 	= "{" _ f:sized* "}" _
@@ -378,25 +388,25 @@ fieldset
 		}
 
 field
-	= e:endian "signed" _ ":" _ bits:integer n:identifier
+	= e:endian? "signed" _ ":" _ bits:integer n:identifier
 		{
 			if (bits > 32) throw new Error("Integer fields may not exceed 32 bits") ;
 			
 			return { type: "signed", endian: e, name: n, size: bits };
 		}
-	/ e:endian "unsigned" _ ":" _ bits:integer n:identifier
+	/ e:endian? "unsigned" _ ":" _ bits:integer n:identifier
 		{
 			if (bits > 32) throw new Error("Integer fields may not exceed 32 bits") ;
 			
 			return { type: "unsigned", endian: e, name: n, size: bits };
 		}
-	/ e:endian "float"  _  ":" _ bits:integer n:identifier
+	/ e:endian? "float"  _  ":" _ bits:integer n:identifier
 		{
 			if (bits != 64 && bits != 32) throw new Error("IEEE Floating point may only be 32 and 64 bit") ;
 
 			return { type: "float", endian: e, name: n, size: bits };
 		}
-	/ "void" _  ":" _ bits:integer
+	/ "void" _  ":" _ bits:integer identifier?
 		{
 			return { type: "void", size: bits };
 		}
@@ -427,14 +437,6 @@ sized
 		}
 	/ f:field (";" _)?
 		{ return f; }
-
-endian
-	= "big"i _
-		{ return "big"; }
-	/ "little"i _
-		{ return "little"; }
-	/ _
-		{ return "little"; }
 
 identifier
 	= a:[a-z_] b:[a-z0-9_]* _

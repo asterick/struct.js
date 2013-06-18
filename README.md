@@ -26,9 +26,10 @@ curly braces. C style comments are supported.
 
 #### Top level structure (field group)
 
-```[top / bottom]? [FieldGroup]```
+```[top / bottom]? [little / big]? [FieldGroup]```
 
-The top level structure is simply a field group, with an optional bit packing identifier.
+The top level structure is simply a field group, with an optional bit packing identifier and
+default endianness of integer types.
 
 By default bottom up packing is used, implying that the first field is encoded in the least
 significant bits of a field first.
@@ -66,9 +67,11 @@ May only be 32 and 64 bits in length.
 
 An optional endian parameter may be specified to change byte order: "big" or "little".
 
-``` void:[bitsize] ```
+``` void:[bitsize] [name]```
 
 Create an untyped, unnamed bit field. Useful for aligning bit fields.
+For the sake of readability, you may specify an identifier name for your void fields.  
+This identifier is ignored.
 
 #### Grouping types
 
