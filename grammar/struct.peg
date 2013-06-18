@@ -195,21 +195,6 @@ main
 	}
 
 	function float(little, bits, byteAddress, bitOffset) {
-		if (!bitOffset) {
-			switch (bits) {
-			case 32:
-				return {
-					get: function () { return this.$dv.getFloat32(byteAddress, little); },
-					set: function (v) { this.$dv.setFloat32(byteAddress, v, little); }
-				}
-			case 64:
-				return {
-					get: function () { return this.$dv.getFloat64(byteAddress, little); },
-					set: function (v) { this.$dv.setFloat64(byteAddress, v, little); }
-				}
-			}
-		}
-
 		var rl, rh, wl, wh; 
 		
 		if (little || bits != 64) {
@@ -299,17 +284,17 @@ main
 
 	function struct(field, offset) {
 		var accessors = globals(),
-			chain = ["this.$u8 = u8; this.$dv = dv;"];
+			chain = ["this.$u8 = u8;"];
 
 		field.fields.forEach(function (field) {
 			var simple = accessor(accessors, field, field.offset + offset);
 
-			if (!simple) { chain.push("this.", field.name, " = new this.", field.name, "(u8,dv);"); }
+			if (!simple) { chain.push("this.", field.name, " = new this.", field.name, "(u8);"); }
 		});
 
 		Object.defineProperty(accessors, "_size", { value: Math.ceil(field.size / 8) });
 
-		var f = new Function("u8", "dv", chain.join(""))
+		var f = new Function("u8", chain.join(""))
 		f.prototype = accessors;
 
 		return f;
@@ -317,15 +302,15 @@ main
 
 	function array(field, offset) {
 		var accessors = globals(),
-			chain = ["this.$u8 = u8; this.$dv = dv;"];
+			chain = ["this.$u8 = u8;"];
 
 		for (var i = 0; i < field.count; i++) {
 			var simple = accessor(accessors, field.field, offset + field.field.size * i, i);
 
-			if (!simple) { chain.push("this[", i, "] = new this[", i, "](u8,dv);"); }
+			if (!simple) { chain.push("this[", i, "] = new this[", i, "](u8);"); }
 		}
 
-		var f = new Function("u8", "dv", chain.join(""))
+		var f = new Function("u8", chain.join(""))
 		f.prototype = accessors;
 
 		Object.defineProperty(accessors, "_size", { value: Math.ceil(field.field.size * field.count / 8) });
@@ -337,16 +322,15 @@ main
 	var tlc = struct(structure, 0),
 		bytes = Math.ceil(structure.size / 8);
 
-	return function (data) {
+	return function (data, offset) {
 		if (!data) {
 			data = new ArrayBuffer(bytes);
 		} else if (data.byteLength < bytes) {
 			throw new Error("ArrayBuffer is below minimum length");
 		}
 
-		var u8 = new Uint8Array(data),
-			dv = new DataView(data),
-			s = new tlc(u8, dv);
+		var u8 = new Uint8Array(data, offset || 0),
+			s = new tlc(u8);
 
 		s._data = data;
 
