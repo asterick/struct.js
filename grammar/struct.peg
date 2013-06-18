@@ -8,7 +8,7 @@ main
 	var default_packing = "bottom",
 		default_endian = "little",
 		bottomup = ((structure.packing || default_packing) === "bottom"),
-		tdv = new DataView(new ArrayBuffer(8));
+		top_level;
 
 	// This is currently only little endian
 	function readBits(little, bits, byteAddress, bitOffset) {
@@ -17,15 +17,11 @@ main
 			q = 8 - bitOffset;
 
 		function top(bits) {
-			var o = "this.$u8[" + ba + "] >>" + (8 - bits);
-
-			return o;
+			return "this.$u8[" + ba + "] >>" + (8 - bits);
 		}
 
 		function bottom(bits) {
-			var o = "this.$u8[" + ba + "] & " + ((1 << bits) - 1);
-
-			return o;
+			return "this.$u8[" + ba + "] & " + ((1 << bits) - 1);
 		}
 
 		function shift(s, a) {
@@ -224,24 +220,12 @@ main
 	}
 
 	// === Prototype generators ========
+	var _globals = {
+		_tdv: new DataView(new ArrayBuffer(8))
+	};
+
 	function globals() {
-		var proto = {};
-
-		Object.defineProperties(proto, {
-			_tdv: { value: tdv }
-		});
-
-		return proto;
-	}
-
-	function isSimple(field) {
-		switch (field.type) {
-		case 'unsigned':
-		case 'signed':
-		case 'float':
-			return true;
-		}
-		return false;
+		return Object.create(_globals);
 	}
 
 	function accessor(accessors, field, offset, index) {
@@ -310,19 +294,20 @@ main
 			if (!simple) { chain.push("this[", i, "] = new this[", i, "](u8);"); }
 		}
 
+		Object.defineProperty(accessors, "_size", { value: Math.ceil(field.field.size * field.count / 8) });
+
 		var f = new Function("u8", chain.join(""))
 		f.prototype = accessors;
-
-		Object.defineProperty(accessors, "_size", { value: Math.ceil(field.field.size * field.count / 8) });
 
 		return f;
 	}
 
-	// Create constructor
-	var tlc = struct(structure, 0),
-		bytes = Math.ceil(structure.size / 8);
-
+	// Return lazy constructor for structures
 	return function (data, offset) {
+		var bytes = Math.ceil(structure.size / 8);
+		
+		if (!top_level) { top_level = struct(structure, 0); }
+
 		if (!data) {
 			data = new ArrayBuffer(bytes);
 		} else if (data.byteLength < bytes) {
@@ -330,7 +315,7 @@ main
 		}
 
 		var u8 = new Uint8Array(data, offset || 0),
-			s = new tlc(u8);
+			s = new top_level(u8);
 
 		s._data = data;
 
@@ -372,29 +357,29 @@ fieldset
 		}
 
 field
-	= e:endian? "signed" _ ":" _ bits:integer n:identifier
+	= e:endian? "signed"i _ ":" _ bits:integer n:identifier
 		{
 			if (bits > 32) throw new Error("Integer fields may not exceed 32 bits") ;
 			
 			return { type: "signed", endian: e, name: n, size: bits };
 		}
-	/ e:endian? "unsigned" _ ":" _ bits:integer n:identifier
+	/ e:endian? "unsigned"i _ ":" _ bits:integer n:identifier
 		{
 			if (bits > 32) throw new Error("Integer fields may not exceed 32 bits") ;
 			
 			return { type: "unsigned", endian: e, name: n, size: bits };
 		}
-	/ e:endian? "float"  _  ":" _ bits:integer n:identifier
+	/ e:endian? "float"i  _  ":" _ bits:integer n:identifier
 		{
 			if (bits != 64 && bits != 32) throw new Error("IEEE Floating point may only be 32 and 64 bit") ;
 
 			return { type: "float", endian: e, name: n, size: bits };
 		}
-	/ "void" _  ":" _ bits:integer identifier?
+	/ "void"i _  ":" _ bits:integer identifier?
 		{
 			return { type: "void", size: bits };
 		}
-	/ "union" _ n:identifier f:fieldset
+	/ "union"i _ n:identifier f:fieldset
 		{ 
 			var size = f.reduce(function (a, b) {
 				b.offset = 0;
@@ -403,7 +388,7 @@ field
 
 			return { type: "struct", name: n, fields: f, size: size };
 		}
-	/ "struct" _ n:identifier f:fieldset
+	/ "struct"i _ n:identifier f:fieldset
 		{
 			var size = f.reduce(function (a, b) {
 				return a + b.size;
