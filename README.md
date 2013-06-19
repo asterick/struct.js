@@ -98,28 +98,60 @@ Arrays may also be group by additional array in minor to major order.
 In this case, ```bitmap[1][0]``` falls before ```bitmap[0][1]``` inside of the the low-level
 array buffer.
 
-### Example (structure)
+### Example (.ZIP file blocks)
 
-	{
-		big unsigned:32 	header;
-		little float:64 	version;
-		unsigned:16 		code;
-		unsigned:16			length;
+	little union {
+		unsigned:32 id;
 
-		union operations {
-			float:32 float;
-			float:64 double;
-			struct game_message {
-				unsigned:8 length;
-				unsigned:8 utf8[255];
-			};
-			struct position {
-				unsigned:16 entity;
-				signed:32	_x;
-				signed:32	_y;
-				signed:32	_z;
-			}
-		}
+		struct end_central_directory {
+			void:32 	_id;
+			
+			unsigned:16 disk_number;
+			unsigned:16 central_dir_disk;
+			unsigned:16 records_on_disk;
+			unsigned:16 total_records;
+			unsigned:32 central_record_size;
+			unsigned:32 central_record_start;
+			unsigned:16 comment_length;
+		};
+
+		struct local_file {
+			void:32 	_id;
+
+			unsigned:16	version;
+			unsigned:16 flags;
+			unsigned:16 compression;
+			unsigned:16 modified_time;
+			unsigned:16 modified_date;
+			unsigned:32 crc32;
+			unsigned:32 compressed_size;
+			unsigned:32 uncompressed_size;
+			unsigned:16 file_name_length;
+			unsigned:16 extra_field_length;
+		};
+
+		struct central_directory {
+			void:32 	_id;
+
+			unsigned:16	version;
+			unsigned:16	minimum_version;
+			unsigned:16	flags;
+			unsigned:16	compression;
+			unsigned:16	modified_time;
+			unsigned:16	modified_date;
+			unsigned:32	crc32;
+			unsigned:32	compressed_size;
+			unsigned:32	uncompressed_size;
+
+			unsigned:16	file_name_length;
+			unsigned:16	extra_field_length;
+			unsigned:16	comment_length;
+
+			unsigned:16	disk_number;
+			unsigned:16	int_file_attr;
+			unsigned:32	ext_file_attr;
+			unsigned:32	rel_offset;
+		};
 	}
 
 ### Example (usage)
