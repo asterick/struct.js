@@ -26,10 +26,11 @@ curly braces. C style comments are supported.
 
 #### Top level structure (field group)
 
-```[top / bottom]? [little / big]? [FieldGroup]```
+```[top / bottom]? [little / big]? [union]? [FieldGroup]```
 
 The top level structure is simply a field group, with an optional bit packing identifier and
-default endianness of integer types.
+default endianness of integer types.  If you specify union, the field group will be treated as
+a union.
 
 By default bottom up packing is used, implying that the first field is encoded in the least
 significant bits of a field first.

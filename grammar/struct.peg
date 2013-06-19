@@ -328,9 +328,9 @@ main
  **/
 
 top_level
-	= p:packing? e:endian? f:fieldset
+	= p:packing? e:endian? "union"i _ f:union_set
 		{ return { packing: p, endian: e, fields: f, size: f.size }; }
-	/ e:endian? p:packing? f:fieldset
+	/ p:packing? e:endian? f:struct_set
 		{ return { packing: p, endian: e, fields: f, size: f.size }; }
 
 packing
@@ -345,12 +345,23 @@ endian
 	/ "little"i _
 		{ return "little"; }
 
-fieldset
+struct_set
 	= "{" _ f:sized* "}" _
 		{
 			f.size = f.reduce(function (offset, field) {
 				field.offset = offset;
 				return offset + field.size;
+			}, 0);
+
+			return f;
+		}
+
+union_set
+	= "{" _ f:sized* "}" _
+		{
+			f.size = f.reduce(function (size, field) {
+				field.offset = 0;
+				return Math.max(size, field.size);
 			}, 0);
 
 			return f;
@@ -379,22 +390,13 @@ field
 		{
 			return { type: "void", size: bits };
 		}
-	/ "union"i _ n:identifier f:fieldset
+	/ "union"i _ n:identifier f:union_set
 		{ 
-			var size = f.reduce(function (a, b) {
-				b.offset = 0;
-				return Math.max(a, b.size);
-			}, 0);
-
-			return { type: "struct", name: n, fields: f, size: size };
+			return { type: "struct", name: n, fields: f, size: f.size };
 		}
-	/ "struct"i _ n:identifier f:fieldset
+	/ "struct"i _ n:identifier f:struct_set
 		{
-			var size = f.reduce(function (a, b) {
-				return a + b.size;
-			}, 0);
-
-			return { type: "struct", name: n, fields: f, size: size };
+			return { type: "struct", name: n, fields: f, size: f.size };
 		}
 
 sized
