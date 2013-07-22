@@ -410,7 +410,7 @@ sized
 		{ return f; }
 
 identifier
-	= a:[a-z_] b:[a-z0-9_]* _
+	= a:[a-z_]i b:[a-z0-9_]i* _
 		{ return a + b.join(''); }
 
 integer
