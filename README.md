@@ -1,26 +1,19 @@
 struct.js
 =========
 
-Struct.js is a strong typed data structure parser for javascript with a C-like syntax. 
+Struct.js is a strong typed data structure parser for javascript with a C-like syntax.
 It currently works both in browser and with node.js (depends on peg.js build settings)
 
-The structures are bit packed and will allow misaligned values of any type 
+The structures are bit packed and will allow misaligned values of any type
 (including floating-point).  This allows for very flexible network message decoding.
-
-Building
---------
-
-	npm install
-	grunt peg
-
 
 Usage
 -----
 
 ### Struct.js Syntax
 
-Struct.js only interprets the characters: A-Z, 0-9 and _ as indentifier characters, and 
-identifiers may not begin with a number.  The top level entity must be surrounded with 
+Struct.js only interprets the characters: A-Z, 0-9 and _ as indentifier characters, and
+identifiers may not begin with a number.  The top level entity must be surrounded with
 curly braces. C style comments are supported.
 
 
@@ -35,19 +28,19 @@ a union.
 By default bottom up packing is used, implying that the first field is encoded in the least
 significant bits of a field first.
 
-Field groups are named identifiers surrounded by parentheses allow you to specify 
-multiple fields for the top-level struct, unions and structs.  
-Semi-colons are optional for seperating fields.  
+Field groups are named identifiers surrounded by parentheses allow you to specify
+multiple fields for the top-level struct, unions and structs.
+Semi-colons are optional for seperating fields.
 
 	{
 		... fields go here ...
 	}
 
-#### Bit-field types	
+#### Bit-field types
 
 ```[endian]? unsigned:[bitsize] [identifer]```
 
-Create an unsigned bit field of n-bits in length.  
+Create an unsigned bit field of n-bits in length.
 These fields are restricted to 32-bits in max length (javascript limitations)
 
 An optional endian parameter may be specified to change byte order: "big" or "little".
@@ -56,14 +49,14 @@ An optional endian parameter may be specified to change byte order: "big" or "li
 
 ```[endian]? signed:[bitsize] [identifer]```
 
-Create an 2's complement bit field of n-bits in length.  
+Create an 2's complement bit field of n-bits in length.
 These fields are restricted to 32-bits in max length (javascript limitations)
 
 An optional endian parameter may be specified to change byte order: "big" or "little".
 
 ```[endian]? float:[bitsize] [identifer]```
 
-Create an IEEE floating point field.  
+Create an IEEE floating point field.
 May only be 32 and 64 bits in length.
 
 An optional endian parameter may be specified to change byte order: "big" or "little".
@@ -71,17 +64,17 @@ An optional endian parameter may be specified to change byte order: "big" or "li
 ``` void:[bitsize] [name]```
 
 Create an untyped, unnamed bit field. Useful for aligning bit fields.
-For the sake of readability, you may specify an identifier name for your void fields.  
+For the sake of readability, you may specify an identifier name for your void fields.
 This identifier is ignored.
 
 #### Grouping types
 
-```struct [identifier] [field group]``` 
-Create a structured group of fields.  
+```struct [identifier] [field group]```
+Create a structured group of fields.
 The position of each field is equal to the previous field plus it's size in bits.
 
 ```union [identifier] [field group]```
-Creates an overlaid grouping.  This is much like the ```struct``` type, except 
+Creates an overlaid grouping.  This is much like the ```struct``` type, except
 all the fields share the same bit position.  This structure's size is determined
 by the maximum size of it's individual fields.
 
@@ -105,7 +98,7 @@ array buffer.
 
 		struct end_central_directory {
 			void:32 	_id;
-			
+
 			unsigned:16 disk_number;
 			unsigned:16 central_dir_disk;
 			unsigned:16 records_on_disk;
